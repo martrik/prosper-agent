@@ -9,6 +9,22 @@ from loguru import logger
 from pipecat_flows import FlowArgs, FlowManager, FlowResult, FlowsFunctionSchema, NodeConfig
 
 
+class ClaimNumberResult(FlowResult):
+    claim_number: str
+
+class SubmissionDateResult(FlowResult):
+    date: str
+
+class StatusResult(FlowResult):
+    status: str
+
+class AmountResult(FlowResult):
+    amount: str
+
+class VerificationResult(FlowResult):
+    confirmed: bool
+
+
 def generate_claim_number() -> str:
     """Generate 10 alphanumeric characters + 3 zeros (13 total)"""
     chars = string.ascii_uppercase + string.digits
@@ -79,14 +95,14 @@ def validate_amount(amount_str: str) -> tuple[bool, Optional[str]]:
         return False, f"Could not understand the amount '{amount_str}'. Please provide a number"
 
 
-async def handle_greeting(args: FlowArgs, flow_manager: FlowManager) -> tuple[FlowResult, NodeConfig]:
+async def handle_greeting(args: FlowArgs, flow_manager: FlowManager) -> tuple[ClaimNumberResult, NodeConfig]:
     """Handle initial greeting from user and provide claim number"""
     claim_number = generate_claim_number()
     flow_manager.state["claim_number"] = claim_number
     
     logger.info(f"Generated claim number: {claim_number}")
     
-    return FlowResult(), provide_claim_number_node()
+    return ClaimNumberResult(claim_number=claim_number), provide_claim_number_node(claim_number)
 
 
 async def handle_claim_number_acknowledged(args: FlowArgs, flow_manager: FlowManager) -> tuple[FlowResult, NodeConfig]:
@@ -94,7 +110,7 @@ async def handle_claim_number_acknowledged(args: FlowArgs, flow_manager: FlowMan
     return FlowResult(), ask_submission_date_node()
 
 
-async def handle_submission_date(args: FlowArgs, flow_manager: FlowManager):
+async def handle_submission_date(args: FlowArgs, flow_manager: FlowManager) -> tuple[SubmissionDateResult | FlowResult, NodeConfig]:
     """Validate and store submission date"""
     date_input = args.get("date", "")
     
@@ -104,13 +120,13 @@ async def handle_submission_date(args: FlowArgs, flow_manager: FlowManager):
         flow_manager.state["submission_date"] = result
         logger.info(f"Captured submission date: {result}")
         # TODO: Save to database - claim_data = {"claim_number": flow_manager.state["claim_number"], "submission_date": result}
-        return FlowResult(), ask_status_node()
+        return SubmissionDateResult(date=result), ask_status_node()
     else:
         error_msg = f"I'm sorry, {result}. Could you please provide the date again? For example, you can say January 15th 2024, or 01/15/2024."
         return FlowResult(error=error_msg), ask_submission_date_node()
 
 
-async def handle_status(args: FlowArgs, flow_manager: FlowManager):
+async def handle_status(args: FlowArgs, flow_manager: FlowManager) -> tuple[StatusResult | FlowResult, NodeConfig]:
     """Validate and store claim status"""
     status_input = args.get("status", "")
     
@@ -120,42 +136,48 @@ async def handle_status(args: FlowArgs, flow_manager: FlowManager):
         flow_manager.state["status"] = result
         logger.info(f"Captured status: {result}")
         # TODO: Save to database - claim_data = {"claim_number": flow_manager.state["claim_number"], "status": result}
-        return FlowResult(), ask_amount_node()
+        return StatusResult(status=result), ask_amount_node()
     else:
         error_msg = f"I'm sorry, {result}. Please provide one of these statuses."
         return FlowResult(error=error_msg), ask_status_node()
 
 
-async def handle_amount(args: FlowArgs, flow_manager: FlowManager):
+async def handle_amount(args: FlowArgs, flow_manager: FlowManager) -> tuple[AmountResult | FlowResult, NodeConfig]:
     """Validate and store claim amount"""
     amount_input = args.get("amount", "")
     
-    is_valid, result = validate_amount(amount_input)
+    is_valid, amount = validate_amount(amount_input)
     
     if is_valid:
-        flow_manager.state["amount"] = result
-        logger.info(f"Captured amount: {result}")
-        # TODO: Save to database - claim_data = {"claim_number": flow_manager.state["claim_number"], "amount": result}
-        return FlowResult(), verify_information_node()
+        flow_manager.state["amount"] = amount
+        logger.info(f"Captured amount: {amount}")
+        # TODO: Save to database - claim_data = {"claim_number": flow_manager.state["claim_number"], "amount": amount}
+        
+        return AmountResult(amount=amount), verify_information_node(
+            flow_manager.state["claim_number"],
+            flow_manager.state["submission_date"],
+            flow_manager.state["status"],
+            amount
+        )
     else:
-        error_msg = f"I'm sorry, {result}. Please provide the claim amount as a number."
+        error_msg = f"I'm sorry, {amount}. Please provide the claim amount as a number."
         return FlowResult(error=error_msg), ask_amount_node()
 
 
-async def handle_verification(args: FlowArgs, flow_manager: FlowManager):
+async def handle_verification(args: FlowArgs, flow_manager: FlowManager) -> tuple[VerificationResult, NodeConfig]:
     """Handle user confirmation of information"""
     confirmed = args.get("confirmed", False)
     
     if confirmed or str(confirmed).lower() in ["yes", "true", "correct", "right", "yep", "yeah"]:
         logger.info("User confirmed all information is correct")
         # TODO: Save final confirmation to database
-        return FlowResult(), end_node()
+        return VerificationResult(confirmed=True), end_node()
     else:
         logger.info("User wants to make corrections")
-        return FlowResult(), correction_node()
+        return VerificationResult(confirmed=False), correction_node()
 
 
-async def handle_correction(args: FlowArgs, flow_manager: FlowManager):
+async def handle_correction(args: FlowArgs, flow_manager: FlowManager) -> tuple[FlowResult, NodeConfig]:
     """Route to appropriate node based on what needs correction"""
     field_to_correct = args.get("field_to_correct", "").lower()
     
@@ -198,13 +220,13 @@ def start_node():
     )
 
 
-def provide_claim_number_node():
+def provide_claim_number_node(claim_number: str):
     """Provide the generated claim number"""
     return NodeConfig(
         task_messages=[
             {
                 "role": "system", 
-                "content": f"Tell the user the claim number is {{{{ claim_number }}}}. Speak it clearly, digit by digit if needed. Wait for them to confirm they found it."
+                "content": f"Tell the user the claim number is {claim_number}. Speak it clearly, character by character or in groups. Wait for them to confirm they found it in their system."
             }
         ],
         functions=[
@@ -297,13 +319,13 @@ def ask_amount_node():
     )
 
 
-def verify_information_node():
+def verify_information_node(claim_number: str, submission_date: str, status: str, amount: str):
     """Verify all collected information with the user"""
     return NodeConfig(
         task_messages=[
             {
                 "role": "system",
-                "content": "Read back all the information you've collected: the claim number {{{{ claim_number }}}}, submission date {{{{ submission_date }}}}, status {{{{ status }}}}, and amount {{{{ amount }}}}. Then ask if this is all correct."
+                "content": f"Read back all the information you've collected: the claim number is {claim_number}, the submission date is {submission_date}, the status is {status}, and the claim amount is {amount}. Then ask if this is all correct."
             }
         ],
         functions=[
