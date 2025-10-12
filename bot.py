@@ -61,7 +61,7 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, testing: bool):
 
     tts = CartesiaTTSService(
         api_key=os.getenv("CARTESIA_API_KEY"),
-        voice_id="71a7ad14-091c-4e8e-a314-022ece01c121",  # British Reading Lady
+        voice_id="248be419-c632-4f23-adf1-5324ed7dbf1d",
         push_silence_after_stop=testing,
     )
 
