@@ -15,7 +15,6 @@ import aiofiles
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import LLMRunFrame
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -32,6 +31,9 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
 )
+from pipecat_flows import FlowManager
+
+from claim_flow import initial_node
 
 load_dotenv(override=True)
 
@@ -66,7 +68,7 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, testing: bool):
     messages = [
         {
             "role": "system",
-            "content": "You are an elementary teacher in an audio call. Your output will be converted to audio so don't include special characters in your answers. Respond to what the student said in a short short sentence.",
+            "content": "You are a professional caller inquiring about claim information. Your output will be converted to audio so don't include special characters. Keep responses natural and conversational. You are calling to gather information, not receiving a call.",
         },
     ]
 
@@ -99,14 +101,20 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, testing: bool):
             enable_usage_metrics=True,
         ),
     )
+    
+    flow_manager = FlowManager(
+        task=task,
+        llm=llm,
+        context_aggregator=context_aggregator,
+        transport=transport,
+    )
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         # Start recording.
         await audiobuffer.start_recording()
-        # Kick off the conversation.
-        messages.append({"role": "system", "content": "Please introduce yourself to the user."})
-        await task.queue_frames([LLMRunFrame()])
+        # Start the flow - bot initiates with claim inquiry
+        await flow_manager.initialize(initial_node)
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
