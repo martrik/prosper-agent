@@ -9,5 +9,6 @@ dependencies = [
   "pipecatcloud>=0.2.4",
   "twilio",
   "pipecat-ai-flows",
-  "python-dateutil"
+  "python-dateutil",
+  "supabase>=2.22.0",
 ]

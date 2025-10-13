@@ -127,7 +127,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         # Import the bot function from the bot module
-        from bot import bot
+        from agent.bot import bot
         from pipecat.runner.types import WebSocketRunnerArguments
 
         # Create runner arguments and run the bot

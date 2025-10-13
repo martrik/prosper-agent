@@ -23,6 +23,22 @@ When someone calls your Twilio number:
 
 The bot can receive custom data for personalized responses by including query parameters in the webhook URL.
 
+## Conversation Storage
+
+The bot automatically stores conversation records in Supabase for each agent interaction. The following data is captured:
+
+- **Claim ID**: The generated claim number provided to the user
+- **Claim Date**: The submission date of the claim
+- **Claim Status**: The current status (Pending, Approved, Denied, etc.)
+- **Claim Amount**: The monetary amount of the claim
+- **State**: The conversation state tracking progress
+  - `initial`: Conversation started, claim number provided
+  - `ongoing`: User acknowledged claim, data collection in progress
+  - `done`: User verified all information, conversation complete
+- **Created At**: Timestamp of when the conversation started
+
+Each piece of information is saved to the database as it's collected during the conversation flow, allowing you to track and analyze all agent interactions.
+
 ## Prerequisites
 
 ### Twilio
@@ -36,6 +52,10 @@ The bot can receive custom data for personalized responses by including query pa
 - OpenAI API key for the LLM inference
 - Deepgram API key for speech-to-text
 - Cartesia API key for text-to-speech
+
+### Database
+
+- Supabase project with URL and API key for storing conversation records
 
 ### System
 
@@ -56,8 +76,36 @@ The bot can receive custom data for personalized responses by including query pa
 2. Create an .env file and add API keys:
 
    ```sh
-   cp env.example .env
+   touch .env
    ```
+
+   Add the following environment variables to your `.env` file:
+
+   ```env
+   # AI Service API Keys
+   OPENAI_API_KEY=your_openai_api_key_here
+   DEEPGRAM_API_KEY=your_deepgram_api_key_here
+   CARTESIA_API_KEY=your_cartesia_api_key_here
+
+   # Twilio Configuration
+   TWILIO_ACCOUNT_SID=your_twilio_account_sid_here
+   TWILIO_AUTH_TOKEN=your_twilio_auth_token_here
+
+   # Supabase Configuration
+   SUPABASE_URL=your_supabase_project_url_here
+   SUPABASE_KEY=your_supabase_anon_key_here
+
+   # Environment Configuration
+   ENV=local
+   ```
+
+3. Set up your Supabase database:
+
+   - Create a Supabase project at [https://supabase.com](https://supabase.com)
+   - Run the migration to create the conversations table:
+     ```sh
+     supabase db push
+     ```
 
 ## Environment Configuration
 

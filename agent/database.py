@@ -1,0 +1,39 @@
+import os
+from typing import Optional
+
+from loguru import logger
+from supabase import create_client, Client
+
+url: str = os.environ.get("SUPABASE_URL")
+key: str = os.environ.get("SUPABASE_KEY")
+supabase: Client = create_client(url, key)
+
+
+async def create_conversation_record(claim_number: str) -> Optional[int]:
+    """Create a new conversation record in Supabase and return the ID"""
+    try:
+        response = supabase.table("conversations").insert({
+            "claim_id": claim_number,
+            "state": "initial"
+        }).execute()
+        
+        if response.data and len(response.data) > 0:
+            conversation_id = response.data[0]["id"]
+            logger.info(f"Created conversation record with ID: {conversation_id} (state: initial)")
+            return conversation_id
+        return None
+    except Exception as e:
+        logger.error(f"Failed to create conversation record: {e}")
+        return None
+
+
+async def update_conversation_record(conversation_id: int, data: dict) -> bool:
+    """Update an existing conversation record in Supabase"""
+    try:
+        response = supabase.table("conversations").update(data).eq("id", conversation_id).execute()
+        logger.info(f"Updated conversation {conversation_id} with data: {data}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update conversation record: {e}")
+        return False
+

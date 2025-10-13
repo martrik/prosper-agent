@@ -8,6 +8,8 @@ from dateutil import parser as date_parser
 from loguru import logger
 from pipecat_flows import FlowArgs, FlowManager, FlowResult, FlowsFunctionSchema, NodeConfig
 
+from agent.database import create_conversation_record, update_conversation_record
+
 
 class ClaimNumberResult(FlowResult):
     claim_number: str
@@ -26,16 +28,11 @@ class VerificationResult(FlowResult):
 
 
 def generate_claim_number() -> str:
-    """Generate 10 alphanumeric characters + 3 zeros (13 total)"""
     chars = string.ascii_uppercase + string.digits
     return ''.join(random.choices(chars, k=10)) + '000'
 
 
 def validate_date(date_str: str) -> tuple[bool, Optional[str]]:
-    """
-    Validate and parse date from various formats.
-    Returns (is_valid, parsed_date_string or error_message)
-    """
     if not date_str:
         return False, "No date provided"
     
@@ -48,10 +45,6 @@ def validate_date(date_str: str) -> tuple[bool, Optional[str]]:
 
 
 def validate_status(status: str) -> tuple[bool, Optional[str]]:
-    """
-    Validate claim status against common statuses.
-    Returns (is_valid, normalized_status or error_message)
-    """
     if not status:
         return False, "No status provided"
     
@@ -76,10 +69,6 @@ def validate_status(status: str) -> tuple[bool, Optional[str]]:
 
 
 def validate_amount(amount_str: str) -> tuple[bool, Optional[str]]:
-    """
-    Validate and parse claim amount.
-    Returns (is_valid, formatted_amount or error_message)
-    """
     if not amount_str:
         return False, "No amount provided"
     
@@ -96,22 +85,27 @@ def validate_amount(amount_str: str) -> tuple[bool, Optional[str]]:
 
 
 async def handle_greeting(args: FlowArgs, flow_manager: FlowManager) -> tuple[ClaimNumberResult, NodeConfig]:
-    """Handle initial greeting from user and provide claim number"""
     claim_number = generate_claim_number()
     flow_manager.state["claim_number"] = claim_number
     
     logger.info(f"Generated claim number: {claim_number}")
     
+    conversation_id = await create_conversation_record(claim_number)
+    if conversation_id:
+        flow_manager.state["conversation_id"] = conversation_id
+    
     return ClaimNumberResult(claim_number=claim_number), provide_claim_number_node(claim_number)
 
 
 async def handle_claim_number_acknowledged(args: FlowArgs, flow_manager: FlowManager) -> tuple[FlowResult, NodeConfig]:
-    """Handle user acknowledging they found the claim"""
+    conversation_id = flow_manager.state.get("conversation_id")
+    if conversation_id:
+        await update_conversation_record(conversation_id, {"state": "ongoing"})
+    
     return FlowResult(), ask_submission_date_node()
 
 
 async def handle_submission_date(args: FlowArgs, flow_manager: FlowManager) -> tuple[SubmissionDateResult | FlowResult, NodeConfig]:
-    """Validate and store submission date"""
     date_input = args.get("date", "")
     
     is_valid, result = validate_date(date_input)
@@ -119,7 +113,20 @@ async def handle_submission_date(args: FlowArgs, flow_manager: FlowManager) -> t
     if is_valid:
         flow_manager.state["submission_date"] = result
         logger.info(f"Captured submission date: {result}")
-        # TODO: Save to database - claim_data = {"claim_number": flow_manager.state["claim_number"], "submission_date": result}
+        
+        conversation_id = flow_manager.state.get("conversation_id")
+        if conversation_id:
+            await update_conversation_record(conversation_id, {"claim_date": result})
+        
+        if flow_manager.state.get("correcting"):
+            flow_manager.state["correcting"] = False
+            return SubmissionDateResult(date=result), verify_information_node(
+                flow_manager.state["claim_number"],
+                result,
+                flow_manager.state["status"],
+                flow_manager.state["amount"]
+            )
+        
         return SubmissionDateResult(date=result), ask_status_node()
     else:
         error_msg = f"I'm sorry, {result}. Could you please provide the date again? For example, you can say January 15th 2024, or 01/15/2024."
@@ -127,7 +134,6 @@ async def handle_submission_date(args: FlowArgs, flow_manager: FlowManager) -> t
 
 
 async def handle_status(args: FlowArgs, flow_manager: FlowManager) -> tuple[StatusResult | FlowResult, NodeConfig]:
-    """Validate and store claim status"""
     status_input = args.get("status", "")
     
     is_valid, result = validate_status(status_input)
@@ -135,7 +141,20 @@ async def handle_status(args: FlowArgs, flow_manager: FlowManager) -> tuple[Stat
     if is_valid:
         flow_manager.state["status"] = result
         logger.info(f"Captured status: {result}")
-        # TODO: Save to database - claim_data = {"claim_number": flow_manager.state["claim_number"], "status": result}
+        
+        conversation_id = flow_manager.state.get("conversation_id")
+        if conversation_id:
+            await update_conversation_record(conversation_id, {"claim_status": result})
+        
+        if flow_manager.state.get("correcting"):
+            flow_manager.state["correcting"] = False
+            return StatusResult(status=result), verify_information_node(
+                flow_manager.state["claim_number"],
+                flow_manager.state["submission_date"],
+                result,
+                flow_manager.state["amount"]
+            )
+        
         return StatusResult(status=result), ask_amount_node()
     else:
         error_msg = f"I'm sorry, {result}. Please provide one of these statuses."
@@ -143,7 +162,6 @@ async def handle_status(args: FlowArgs, flow_manager: FlowManager) -> tuple[Stat
 
 
 async def handle_amount(args: FlowArgs, flow_manager: FlowManager) -> tuple[AmountResult | FlowResult, NodeConfig]:
-    """Validate and store claim amount"""
     amount_input = args.get("amount", "")
     
     is_valid, amount = validate_amount(amount_input)
@@ -151,7 +169,14 @@ async def handle_amount(args: FlowArgs, flow_manager: FlowManager) -> tuple[Amou
     if is_valid:
         flow_manager.state["amount"] = amount
         logger.info(f"Captured amount: {amount}")
-        # TODO: Save to database - claim_data = {"claim_number": flow_manager.state["claim_number"], "amount": amount}
+        
+        conversation_id = flow_manager.state.get("conversation_id")
+        if conversation_id:
+            numeric_amount = float(amount.replace('$', '').replace(',', ''))
+            await update_conversation_record(conversation_id, {"claim_amount": numeric_amount})
+        
+        if flow_manager.state.get("correcting"):
+            flow_manager.state["correcting"] = False
         
         return AmountResult(amount=amount), verify_information_node(
             flow_manager.state["claim_number"],
@@ -165,12 +190,16 @@ async def handle_amount(args: FlowArgs, flow_manager: FlowManager) -> tuple[Amou
 
 
 async def handle_verification(args: FlowArgs, flow_manager: FlowManager) -> tuple[VerificationResult, NodeConfig]:
-    """Handle user confirmation of information"""
     confirmed = args.get("confirmed", False)
     
     if confirmed or str(confirmed).lower() in ["yes", "true", "correct", "right", "yep", "yeah"]:
         logger.info("User confirmed all information is correct")
-        # TODO: Save final confirmation to database
+        
+        conversation_id = flow_manager.state.get("conversation_id")
+        if conversation_id:
+            await update_conversation_record(conversation_id, {"state": "done"})
+            logger.info(f"Conversation {conversation_id} completed and verified (state: done)")
+        
         return VerificationResult(confirmed=True), end_node()
     else:
         logger.info("User wants to make corrections")
@@ -178,10 +207,11 @@ async def handle_verification(args: FlowArgs, flow_manager: FlowManager) -> tupl
 
 
 async def handle_correction(args: FlowArgs, flow_manager: FlowManager) -> tuple[FlowResult, NodeConfig]:
-    """Route to appropriate node based on what needs correction"""
     field_to_correct = args.get("field_to_correct", "").lower()
     
     logger.info(f"User wants to correct: {field_to_correct}")
+    
+    flow_manager.state["correcting"] = True
     
     if "date" in field_to_correct or "submit" in field_to_correct:
         return FlowResult(), ask_submission_date_node()
@@ -194,7 +224,6 @@ async def handle_correction(args: FlowArgs, flow_manager: FlowManager) -> tuple[
 
 
 def start_node():
-    """Initial node - bot initiates conversation"""
     return NodeConfig(
         role_messages=[
             {
@@ -221,7 +250,6 @@ def start_node():
 
 
 def provide_claim_number_node(claim_number: str):
-    """Provide the generated claim number"""
     return NodeConfig(
         task_messages=[
             {
@@ -242,7 +270,6 @@ def provide_claim_number_node(claim_number: str):
 
 
 def ask_submission_date_node():
-    """Ask for claim submission date"""
     return NodeConfig(
         task_messages=[
             {
@@ -268,7 +295,6 @@ def ask_submission_date_node():
 
 
 def ask_status_node():
-    """Ask for claim status"""
     return NodeConfig(
         task_messages=[
             {
@@ -294,7 +320,6 @@ def ask_status_node():
 
 
 def ask_amount_node():
-    """Ask for claim amount"""
     return NodeConfig(
         task_messages=[
             {
@@ -320,7 +345,6 @@ def ask_amount_node():
 
 
 def verify_information_node(claim_number: str, submission_date: str, status: str, amount: str):
-    """Verify all collected information with the user"""
     return NodeConfig(
         task_messages=[
             {
@@ -346,24 +370,22 @@ def verify_information_node(claim_number: str, submission_date: str, status: str
 
 
 def correction_node():
-    """Ask which field needs correction"""
     return NodeConfig(
         task_messages=[
             {
                 "role": "system",
-                "content": "Ask which piece of information they would like to correct: the submission date, status, or claim amount."
+                "content": "Ask which piece of information they would like to correct: the submission date, status, or amount."
             }
         ],
         functions=[
             FlowsFunctionSchema(
                 name="identify_correction",
-                description="Identify which field the user wants to correct",
+                description="Identify which field the user wants to correct (submission date, status, or amount)",
                 handler=handle_correction,
                 properties={
                     "field_to_correct": {
                         "type": "string",
-                        "enum": ["date", "status", "amount"],
-                        "description": "The field that needs to be corrected"
+                        "description": "The field that needs to be corrected - can be variations like 'date', 'submission date', 'status', 'amount', 'claim amount', etc."
                     }
                 },
                 required=["field_to_correct"]

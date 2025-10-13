@@ -33,7 +33,7 @@ from pipecat.transports.websocket.fastapi import (
 )
 from pipecat_flows import FlowManager
 
-from claim_flow import initial_node
+from agent.claim_flow import initial_node
 
 load_dotenv(override=True)
 
