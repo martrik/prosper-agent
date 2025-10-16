@@ -19,7 +19,6 @@ async def create_conversation_record(claim_number: str) -> Optional[int]:
         
         if response.data and len(response.data) > 0:
             conversation_id = response.data[0]["id"]
-            logger.info(f"Created conversation record with ID: {conversation_id} (state: initial)")
             return conversation_id
         return None
     except Exception as e:
@@ -31,9 +30,8 @@ async def update_conversation_record(conversation_id: int, data: dict) -> bool:
     """Update an existing conversation record in Supabase"""
     try:
         response = supabase.table("conversations").update(data).eq("id", conversation_id).execute()
-        logger.info(f"Updated conversation {conversation_id} with data: {data}")
         return True
     except Exception as e:
-        logger.error(f"Failed to update conversation record: {e}")
+        logger.error(f"Failed to update conversation record: {e}", exc_info=True)
         return False
 
