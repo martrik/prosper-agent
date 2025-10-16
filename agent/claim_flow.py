@@ -87,9 +87,7 @@ def validate_amount(amount_str: str) -> tuple[bool, Optional[str]]:
 async def handle_greeting(args: FlowArgs, flow_manager: FlowManager) -> tuple[ClaimNumberResult, NodeConfig]:
     claim_number = generate_claim_number()
     flow_manager.state["claim_number"] = claim_number
-    
-    logger.info(f"Generated claim number: {claim_number}")
-    
+        
     conversation_id = await create_conversation_record(claim_number)
     if conversation_id:
         flow_manager.state["conversation_id"] = conversation_id

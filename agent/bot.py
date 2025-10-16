@@ -34,7 +34,7 @@ from pipecat.transports.websocket.fastapi import (
 from pipecat_flows import FlowManager
 
 from agent.claim_flow import initial_node
-from agent.database import update_conversation_record
+from agent.database import create_conversation_metrics_record, update_conversation_record
 from agent.latency_observer import CustomLatencyObserver, LatencyMetricsCollector
 
 load_dotenv(override=True)
@@ -94,7 +94,11 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, testing: bool):
         ]
     )
 
-    metrics_collector = LatencyMetricsCollector()
+    metrics_collector = LatencyMetricsCollector(
+        stt_provider="Deepgram",
+        llm_provider="OpenAI",
+        tts_provider="Cartesia"
+    )
     latency_observer = CustomLatencyObserver(metrics_collector)
 
     task = PipelineTask(
@@ -104,8 +108,8 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, testing: bool):
             audio_out_sample_rate=8000,
             enable_metrics=True,
             enable_usage_metrics=True,
-            observers=[latency_observer],
         ),
+        observers=[latency_observer],
     )
     
     flow_manager = FlowManager(
@@ -123,26 +127,13 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, testing: bool):
         await flow_manager.initialize(initial_node)
 
     @transport.event_handler("on_client_disconnected")
-    async def on_client_disconnected(transport, client):
-        logger.info("Client disconnected, collecting latency metrics...")
-        
-        avg_latency, min_latency, max_latency = metrics_collector.get_metrics()
+    async def on_client_disconnected(transport, client):                
         conversation_id = flow_manager.state.get("conversation_id")
-                
-        if conversation_id and avg_latency is not None:
-            success = await update_conversation_record(
-                conversation_id,
-                {
-                    "avg_latency": avg_latency,
-                    "min_latency": min_latency,
-                    "max_latency": max_latency
-                }
-            )
+        if conversation_id:
+            detailed_metrics = metrics_collector.get_metrics_for_db()
+            await create_conversation_metrics_record(conversation_id, detailed_metrics)
         else:
-            if not conversation_id:
-                logger.warning("⚠️ No conversation_id found - cannot save metrics")
-            elif avg_latency is None:
-                logger.warning("⚠️ No latency data collected during conversation")
+            logger.warning("⚠️ No conversation_id found - cannot save metrics")
         
         await task.cancel()
 

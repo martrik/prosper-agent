@@ -35,3 +35,16 @@ async def update_conversation_record(conversation_id: int, data: dict) -> bool:
         logger.error(f"Failed to update conversation record: {e}", exc_info=True)
         return False
 
+
+async def create_conversation_metrics_record(conversation_id: int, metrics_data: dict) -> bool:
+    """Create a conversation metrics record in Supabase"""
+    try:
+        data = {
+            "conversation_id": conversation_id,
+            **metrics_data
+        }
+        response = supabase.table("conversation_metrics").insert(data).execute()
+        return True
+    except Exception as e:
+        logger.error(f"Failed to create conversation metrics record: {e}", exc_info=True)
+        return False
