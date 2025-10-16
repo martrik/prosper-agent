@@ -349,7 +349,9 @@ def verify_information_node(claim_number: str, submission_date: str, status: str
         task_messages=[
             {
                 "role": "system",
-                "content": f"Read back all the information you've collected: the claim number is {claim_number}, the submission date is {submission_date}, the status is {status}, and the claim amount is {amount}. Then ask if this is all correct."
+                "content": f"Read back all the information you've collected: the claim number is {claim_number}, the submission date is {submission_date}, the status is {status}, \
+                and the claim amount is {amount}. When saying the amount, spell it out in words like 'one thousand dollars and zero cents' rather than reading it as digits. \
+                Then ask if this is all correct."
             }
         ],
         functions=[
