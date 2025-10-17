@@ -13,6 +13,7 @@ ENV UV_LINK_MODE=copy
 WORKDIR /app
 
 COPY ./pyproject.toml pyproject.toml
+COPY ./uv.lock uv.lock
 
 # Install the project's dependencies using the lockfile and settings
 RUN --mount=type=cache,id=s/a17b86e8-81b0-49ca-aebb-5220b591d283-/root/.cache/uv,target=/root/.cache/uv \
