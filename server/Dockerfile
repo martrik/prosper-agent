@@ -16,8 +16,7 @@ COPY ./server/pyproject.toml pyproject.toml
 COPY ./server/uv.lock uv.lock
 
 # Install the project's dependencies using the lockfile and settings
-RUN --mount=type=cache,id=s/a17b86e8-81b0-49ca-aebb-5220b591d283-/root/.cache/uv,target=/root/.cache/uv \
-    uv sync --locked --no-dev
+RUN uv sync --locked --no-dev
 
 # Copy the application code
 COPY ./server/server.py server.py
