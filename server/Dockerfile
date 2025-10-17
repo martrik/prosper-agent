@@ -12,14 +12,14 @@ ENV UV_LINK_MODE=copy
 # Set working directory
 WORKDIR /app
 
-COPY ./server/pyproject.toml pyproject.toml
-COPY ./server/uv.lock uv.lock
+COPY ./pyproject.toml pyproject.toml
+COPY ./uv.lock uv.lock
 
 # Install the project's dependencies using the lockfile and settings
 RUN uv sync --locked --no-dev
 
 # Copy the application code
-COPY ./server/server.py server.py
+COPY ./server.py server.py
 
 # Expose the server port
 EXPOSE 7860
