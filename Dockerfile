@@ -17,6 +17,7 @@ RUN --mount=type=cache,id=s/a17b86e8-81b0-49ca-aebb-5220b591d283-/root/.cache/uv
     uv sync --locked --no-dev
 
 # Copy the application code
+COPY ./pyproject.toml pyproject.toml
 COPY ./server.py server.py
 
 # Expose the server port
