@@ -85,22 +85,18 @@ def validate_amount(amount_str: str) -> tuple[bool, Optional[str]]:
 
 
 async def handle_greeting(args: FlowArgs, flow_manager: FlowManager) -> tuple[ClaimNumberResult, NodeConfig]:
-    claim_number = generate_claim_number()
-    flow_manager.state["claim_number"] = claim_number
+    claim_number = flow_manager.state.get("claim_number")
+    
+    if not claim_number:
+        claim_number = generate_claim_number()
+        flow_manager.state["claim_number"] = claim_number
         
     conversation_id = await create_conversation_record(claim_number)
     if conversation_id:
         flow_manager.state["conversation_id"] = conversation_id
-    
-    return ClaimNumberResult(claim_number=claim_number), provide_claim_number_node(claim_number)
-
-
-async def handle_claim_number_acknowledged(args: FlowArgs, flow_manager: FlowManager) -> tuple[FlowResult, NodeConfig]:
-    conversation_id = flow_manager.state.get("conversation_id")
-    if conversation_id:
         await update_conversation_record(conversation_id, {"state": "ongoing"})
     
-    return FlowResult(), ask_submission_date_node()
+    return ClaimNumberResult(claim_number=claim_number), ask_submission_date_node()
 
 
 async def handle_submission_date(args: FlowArgs, flow_manager: FlowManager) -> tuple[SubmissionDateResult | FlowResult, NodeConfig]:
@@ -221,45 +217,29 @@ async def handle_correction(args: FlowArgs, flow_manager: FlowManager) -> tuple[
         return FlowResult(error="I didn't catch which field you'd like to correct. Please specify the submission date, status, or amount."), correction_node()
 
 
-def start_node():
+def start_node(claim_number: str):
     return NodeConfig(
         role_messages=[
             {
                 "role": "system",
-                "content": "You are a professional caller inquiring about claim information. Keep your responses natural and conversational. Your output will be converted to audio so don't include special characters."
+                "content": "You are a professional caller inquiring about claim information. \
+                    Keep your responses natural and conversational. \
+                    Your output will be converted to audio so don't include special characters."
             }
         ],
         task_messages=[
             {
                 "role": "system",
-                "content": "Greet the user and say you need information about a claim. Wait for them to ask which claim or for the claim number."
+                "content": f"Introduce yourself and say you need information about a specific claim. \
+                    Tell them you're calling about claim number {claim_number}. Speak the claim number clearly, \
+                    character by character or in groups, but don't spell it out. Ask them to confirm when they've pulled it up in their system."
             }
         ],
         functions=[
             FlowsFunctionSchema(
-                name="provide_claim_number",
-                description="Called when the user asks for the claim number or says they can help.",
+                name="claim_found_in_system",
+                description="Called when the user confirms they have found the claim in their system and are ready to provide information about it.",
                 handler=handle_greeting,
-                properties={},
-                required=[]
-            )
-        ]
-    )
-
-
-def provide_claim_number_node(claim_number: str):
-    return NodeConfig(
-        task_messages=[
-            {
-                "role": "system", 
-                "content": f"Tell the user the claim number is {claim_number}. Speak it clearly, character by character or in groups. Wait for them to confirm they found it in their system."
-            }
-        ],
-        functions=[
-            FlowsFunctionSchema(
-                name="claim_found",
-                description="Called when the user confirms they found the claim and asks what you need.",
-                handler=handle_claim_number_acknowledged,
                 properties={},
                 required=[]
             )
@@ -333,7 +313,7 @@ def ask_amount_node():
                 properties={
                     "amount": {
                         "type": "string",
-                        "description": "The claim amount, which can include dollar signs, commas, or be written as a number"
+                        "description": "The claim amount, which can include dollar signs, commas, or be written as a number."
                     }
                 },
                 required=["amount"]
@@ -347,9 +327,10 @@ def verify_information_node(claim_number: str, submission_date: str, status: str
         task_messages=[
             {
                 "role": "system",
-                "content": f"Read back all the information you've collected: the claim number is {claim_number}, the submission date is {submission_date}, the status is {status}, \
-                and the claim amount is {amount}. When saying the amount, spell it out in words like 'one thousand dollars and zero cents' rather than reading it as digits. \
-                Then ask if this is all correct."
+                "content": f"Read back all the information you've collected: the claim number is {claim_number}, \
+                    the submission date is {submission_date}, the status is {status}, and the claim amount is {amount}. \
+                    When saying the amount, spell it out in words like 'one thousand dollars and zero cents' rather than reading it as digits. \
+                    Then ask if this is all correct."
             }
         ],
         functions=[
@@ -407,5 +388,7 @@ def end_node():
     )
 
 
-initial_node = start_node()
+def create_initial_node():
+    claim_number = generate_claim_number()
+    return start_node(claim_number), claim_number
 
