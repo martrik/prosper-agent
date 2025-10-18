@@ -27,6 +27,8 @@ The bot can receive custom data for personalized responses by including query pa
 
 The bot automatically stores conversation records in Supabase for each agent interaction. The following data is captured:
 
+### Conversations Table
+
 - **Claim ID**: The generated claim number provided to the user
 - **Claim Date**: The submission date of the claim
 - **Claim Status**: The current status (Pending, Approved, Denied, etc.)
@@ -37,7 +39,25 @@ The bot automatically stores conversation records in Supabase for each agent int
   - `done`: User verified all information, conversation complete
 - **Created At**: Timestamp of when the conversation started
 
-Each piece of information is saved to the database as it's collected during the conversation flow, allowing you to track and analyze all agent interactions.
+### Conversation Metrics Table
+
+Detailed performance metrics are stored in a separate `conversation_metrics` table with a foreign key to the conversation. This includes:
+
+- **Overall Latency**: Average, min, and max end-to-end latency
+- **STT Metrics** (Deepgram):
+  - Provider name
+  - Processing time (avg, min, max)
+  - Time to First Byte/TTFB (avg, min, max)
+- **LLM Metrics** (OpenAI):
+  - Provider name
+  - Processing time (avg, min, max)
+  - Time to First Byte/TTFB (avg, min, max)
+- **TTS Metrics** (Cartesia):
+  - Provider name
+  - Processing time (avg, min, max)
+  - Time to First Byte/TTFB (avg, min, max)
+
+Each piece of information is saved to the database as it's collected during the conversation flow, allowing you to track and analyze all agent interactions and performance metrics per provider.
 
 ## Prerequisites
 
@@ -50,8 +70,8 @@ Each piece of information is saved to the database as it's collected during the 
 ### AI Services
 
 - OpenAI API key for the LLM inference
+- Cartesia API key for speech-to-text and text-to-speech
 - Deepgram API key for speech-to-text
-- Cartesia API key for text-to-speech
 
 ### Database
 
@@ -69,8 +89,8 @@ Each piece of information is saved to the database as it's collected during the 
 1. Set up a virtual environment and install dependencies:
 
    ```sh
-   cd inbound
    uv sync
+   cd server && uv sync
    ```
 
 2. Create an .env file and add API keys:
@@ -84,8 +104,8 @@ Each piece of information is saved to the database as it's collected during the 
    ```env
    # AI Service API Keys
    OPENAI_API_KEY=your_openai_api_key_here
-   DEEPGRAM_API_KEY=your_deepgram_api_key_here
    CARTESIA_API_KEY=your_cartesia_api_key_here
+   DEEPGRAM_API_KEY=your_deepgram_api_key_here
 
    # Twilio Configuration
    TWILIO_ACCOUNT_SID=your_twilio_account_sid_here
@@ -160,6 +180,18 @@ uv run server.py
 
 Place a call to the number associated with your bot. The bot will answer and start the conversation.
 
+### Use the client
+
+Alternatively, you can use the React-based client to test the server without making phone calls.
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+Visit http://localhost:5173 in your browser.
+
 ## Production Deployment
 
 To deploy your twilio-chatbot for inbound calling, we'll use [Pipecat Cloud](https://pipecat.daily.co/).
@@ -208,10 +240,3 @@ Place a call to the number associated with your bot. The bot will answer and sta
 ## Accessing Call Information in Your Bot
 
 Your bot automatically receives call information through Twilio's `Parameters`. In your `bot.py`, you can access this information from the WebSocket connection. The Pipecat development runner extracts this data using the `parse_telephony_websocket` function. This allows your bot to provide personalized responses based on who's calling and which number they called.
-
-## Testing
-
-It is also possible to test the server without making phone calls by using one of these clients:
-
-- [python](client/python/README.md): This Python client enables automated testing of the server via WebSocket without the need to make actual phone calls.
-- [typescript](client/typescript/README.md): This typescript client enables manual testing of the server via WebSocket without the need to make actual phone calls.
