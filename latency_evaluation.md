@@ -1,22 +1,24 @@
 # Latency Evaluation
 
-## Offline Evaluation
-In order to evaluate the latency of the bot in an automated way, we can use the following approach:
+## Recorded Latency
 
-1. Run the bot in a local environment
-2. Make a call to the bot
-3. Collect the latency metrics
-4. Compare the latency metrics with the expected latency metrics
+With the current model selection, the agent's _recorded_ latency (the time between when the agent thinks that the user has stopped speaking and when the agent starts replying) is on average around 2.3s. The variance is quite high, with the max being around 3.6s and min being around 1.3s.
 
-## Online Evaluation
-In order to evaluate the latency of the bot online, once the bot is already deployed in production,
-we have created a latency observer. This will collect the latencies between the user stops speaking
-and the bot starts responding. At the end of each conversation, the min, max and average latencies
-are recorded in the conversation row. This way we can easily keep track of our bot's latency
-when deployed in production and build alarms and charts around it.
+This agent's latency is a combination of the STT processing time, LLM processing time, and TTS time to first byte (TTFB).
 
-That being said, if I were to make this agent production-ready I wouldn't store the metrics in the
-Postgres datbase. Instead I would have a secondary metrics DB (e.g. Prometheus) and store the metrics there.
-This would allow us to store more data points and query them more efficiently. Apart from the overall
-latency I would also store the latency for each LLM call, each TTS call, each STT call, etc. That would
-allow us to easily identify the root cause of any latency issues, or trends over time.
+The biggest contributor to the latency is without a doubt the LLM. It has an average processing time of around 1 second, which is 3 orders of magnitude slower than the STT and TTS. To lower LLM processing time, we should find a smaller model that manages to maintain the same quality of responses. We have many providers to choose from, each typically offering various model sizes. Right now I'm using OpenAI's GPT-4.1 which performs very well for the task at hand but isn't very fast. It would be interesting to test GPT-5 mini, or even the nano, as they are claimed to be faster and might still perform well for this task. I've tried using them but my OpenAI wasn't verified and I still can't use them. Testing Anthropic's models would also be interesting.
+
+Improving the STT processing time could be achieved by using a faster model, although consering the results it might not be worth the effort. During development I tried Cartesia's new Ink model, which claims to be very fast but based on my testing it wasn't faster than Deepgram's. There are a many of available STT models, both OSS and commercial. If the expected complexity of the audio is low, we could go for fast models with decent WER like Nvidia's low-parameter versions of Parakeet or Canary [source](https://huggingface.co/spaces/hf-audio/open_asr_leaderboard). There are also many STT APIs that would be easier to maintain and probably offer a good trade-off between speed and accuracy, I'd test ElevenLab's Scribe.
+
+TTS models are the newer of the group, and because of that there aren't as many options out there. Cartesia's model is widely used for agents as it balances speed and voice quality really well. It would be worth testing ElevenLab's Flash 2.5 model and compare it against Cartesia's. Similarly to STT though, the latency is quite low so the effort might not be worth it compared to other opportunities like the ones mentioned in the following sections.
+
+Something to explore when using comercial models is entering enterprise contracts with the providers, or using higher service tiers that provide lower latencies. [OpenAI's priority processing](https://openai.com/api-priority-processing/) or Anthropic's [Service tiers](https://docs.claude.com/en/api/service-tiers#get-started-with-priority-tier) are two examples of this.
+
+## Real Latency
+
+The _real_ latency adds three additional components on top of the _recorded_ one:
+- The round-trip time between the user's phone and the agent's server. Some of that latency is out of our control, as it will be added by the telecommunications provider. However, it can be reduced by making sure that our servers are located as close to the telecommunications provider's egress server. Twilio claims to have their servers in the east coast of the US, so that's where I've deployed the webhook server. However, the agent itself is hosted in Pipecat's Cloud, which is in the west coast. Moving the agent to the east could save us [around 40ms](https://www.cloudping.co/).
+- The round-trip between the agent's server and the AI provider's. Same as the above, we need to make sure that the models are hosted as close to the agent's server as possible.
+- The time between when the user actually stops speaking and when the agent considers the user as having stopped. My implementation uses the default Voice Activity Detection (VAD) model, which is a simple threshold-based approach. This is not very accurate and could be improved by using a more sophisticated model. As far as I know this is an on-going challenge in the industry and companies are trying to develop their own models to improve on this. A better model could likely reduce ~200-300ms from the _real_ latency.
+
+To monitor this _real_ latency we could create a service that pretends to be a user, calling or receiving a call from the agent and interacting with it. I would probably design a simplified call flow that would be easy to implement but still be representative of a real call flow. The code would be able to measure the total time between it finishes sending the "user's" audio and when it receives the agent's response. We could run this periodically, perhaps from different locations around the US, to have an idea of the actual latencies that users in those areas experience.
