@@ -2,7 +2,7 @@
 
 ## Recorded Latency
 
-With the current model selection, the agent's _recorded_ latency (the time between when the agent thinks that the user has stopped speaking and when the agent starts replying) is on average around 2.3s. The variance is quite high, with the max being around 3.6s and min being around 1.3s.
+With the current model selection, the agent's _recorded_ latency (the time between when the agent thinks that the user has stopped speaking and when the agent starts replying) is on [average around 2.3s](https://martisv.retool.com/apps/fb762a1e-ac15-11f0-a804-6b6faefa5661/Prosper%20agent/page1). The variance is quite high, with the max being around 3.6s and min being around 1.3s.
 
 This agent's latency is a combination of the STT processing time, LLM processing time, and TTS time to first byte (TTFB).
 
