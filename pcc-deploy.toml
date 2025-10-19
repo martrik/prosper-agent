@@ -1,5 +1,5 @@
 agent_name = "prosper-agent"
-image = "martiserra/prosper-agent:latest"
+image = "martiserra/prosper-agent:0.2.0"
 secret_set = "production"
 
 [scaling]
