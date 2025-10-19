@@ -8,7 +8,7 @@ from dateutil import parser as date_parser
 from loguru import logger
 from pipecat_flows import FlowArgs, FlowManager, FlowResult, FlowsFunctionSchema, NodeConfig
 
-from agent.database import create_conversation_record, update_conversation_record
+from agent.database import update_conversation_record
 
 
 class ClaimNumberResult(FlowResult):
@@ -86,16 +86,6 @@ def validate_amount(amount_str: str) -> tuple[bool, Optional[str]]:
 
 async def handle_greeting(args: FlowArgs, flow_manager: FlowManager) -> tuple[ClaimNumberResult, NodeConfig]:
     claim_number = flow_manager.state.get("claim_number")
-    
-    if not claim_number:
-        claim_number = generate_claim_number()
-        flow_manager.state["claim_number"] = claim_number
-        
-    conversation_id = await create_conversation_record(claim_number)
-    if conversation_id:
-        flow_manager.state["conversation_id"] = conversation_id
-        await update_conversation_record(conversation_id, {"state": "ongoing"})
-    
     return ClaimNumberResult(claim_number=claim_number), ask_submission_date_node()
 
 
@@ -388,6 +378,3 @@ def end_node():
     )
 
 
-def create_initial_node():
-    claim_number = generate_claim_number()
-    return start_node(claim_number)

@@ -33,8 +33,8 @@ from pipecat.transports.websocket.fastapi import (
 )
 from pipecat_flows import FlowManager
 
-from agent.claim_flow import create_initial_node
-from agent.database import create_conversation_metrics_record, update_conversation_record
+from agent.claim_flow import generate_claim_number, start_node
+from agent.database import create_conversation_metrics_record, create_conversation_record, update_conversation_record
 from agent.latency_observer import CustomLatencyObserver, LatencyMetricsCollector
 
 load_dotenv(override=True)
@@ -121,10 +121,16 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, testing: bool):
 
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
-        # Start recording.
         await audiobuffer.start_recording()
-        # Start the flow - bot initiates with claim inquiry
-        await flow_manager.initialize(create_initial_node())
+        
+        claim_number = generate_claim_number()
+        conversation_id = await create_conversation_record(claim_number)
+        if conversation_id:
+            flow_manager.state["claim_number"] = claim_number
+            flow_manager.state["conversation_id"] = conversation_id
+            await flow_manager.initialize(start_node(claim_number))
+        else: 
+            raise Exception("Failed to create conversation record")
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):                

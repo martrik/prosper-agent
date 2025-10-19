@@ -14,7 +14,7 @@ async def create_conversation_record(claim_number: str) -> Optional[int]:
     try:
         response = supabase.table("conversations").insert({
             "claim_id": claim_number,
-            "state": "initial"
+            "state": "ongoing"
         }).execute()
         
         if response.data and len(response.data) > 0:
