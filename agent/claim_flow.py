@@ -390,5 +390,4 @@ def end_node():
 
 def create_initial_node():
     claim_number = generate_claim_number()
-    return start_node(claim_number), claim_number
-
+    return start_node(claim_number)

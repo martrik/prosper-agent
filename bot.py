@@ -33,7 +33,7 @@ from pipecat.transports.websocket.fastapi import (
 )
 from pipecat_flows import FlowManager
 
-from agent.claim_flow import initial_node
+from agent.claim_flow import create_initial_node
 from agent.database import create_conversation_metrics_record, update_conversation_record
 from agent.latency_observer import CustomLatencyObserver, LatencyMetricsCollector
 
@@ -124,7 +124,7 @@ async def run_bot(transport: BaseTransport, handle_sigint: bool, testing: bool):
         # Start recording.
         await audiobuffer.start_recording()
         # Start the flow - bot initiates with claim inquiry
-        await flow_manager.initialize(initial_node)
+        await flow_manager.initialize(create_initial_node())
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):                
