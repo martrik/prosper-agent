@@ -242,7 +242,7 @@ def ask_submission_date_node():
         task_messages=[
             {
                 "role": "system",
-                "content": "Ask when the claim was submitted. Be natural and conversational."
+                "content": "Ask when the claim was submitted."
             }
         ],
         functions=[
@@ -267,7 +267,7 @@ def ask_status_node():
         task_messages=[
             {
                 "role": "system",
-                "content": "Ask what the current status of the claim is. Be natural and conversational."
+                "content": "Ask what the current status of the claim is."
             }
         ],
         functions=[
@@ -292,7 +292,7 @@ def ask_amount_node():
         task_messages=[
             {
                 "role": "system",
-                "content": "Ask what the claim amount is. Be natural and conversational."
+                "content": "Ask what the claim amount is."
             }
         ],
         functions=[
